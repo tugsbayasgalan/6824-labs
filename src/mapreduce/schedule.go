@@ -44,14 +44,21 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			// Decrement the counter when the goroutine completes.
 			defer wg.Done()
 
-			worker := <-registerChan
+			ok := false
 
-			ok := call(worker, "Worker.DoTask", doTaskArgs, nil)
+			for !ok {
+				worker := <-registerChan
+				ok = call(worker, "Worker.DoTask", doTaskArgs, nil)
+				if ok {
+					go func() {
+						registerChan <- worker
+					}()
+				} else {
 
-			if ok {
-				go func() {
-					registerChan <- worker
-				}()
+					fmt.Println("Some work failure happened")
+
+				}
+
 			}
 
 		}()

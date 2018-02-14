@@ -101,10 +101,11 @@ func doReduce(
 	for _, kv := range kvs {
 		_, ok := keyValueMap[kv.Key]
 
-		if ok == true {
+		if ok {
 			keyValueMap[kv.Key] = append(keyValueMap[kv.Key], kv.Value)
 		} else {
 			keyValueMap[kv.Key] = make([]string, 0)
+			keyValueMap[kv.Key] = append(keyValueMap[kv.Key], kv.Value)
 		}
 
 	}
