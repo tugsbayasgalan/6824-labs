@@ -41,7 +41,7 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 func reduceF(key string, values []string) string {
 	// Your code here (Part II).
 
-	return strconv.Itoa(len(values) + 1)
+	return strconv.Itoa(len(values))
 }
 
 // Can be run in 3 ways:
