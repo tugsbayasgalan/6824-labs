@@ -38,11 +38,12 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	for i := 0; i < ntasks; i++ {
 
 		wg.Add(1)
-		doTaskArgs := DoTaskArgs{JobName: jobName, File: mapFiles[i], Phase: phase, TaskNumber: i, NumOtherPhase: nOther}
 
-		go func() {
+		go func(index int) {
 			// Decrement the counter when the goroutine completes.
 			defer wg.Done()
+
+			doTaskArgs := DoTaskArgs{JobName: jobName, File: mapFiles[index], Phase: phase, TaskNumber: index, NumOtherPhase: nOther}
 
 			ok := false
 
@@ -61,7 +62,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 			}
 
-		}()
+		}(i)
 
 	}
 
