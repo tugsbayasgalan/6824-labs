@@ -8,12 +8,15 @@ package raft
 // test with the original before submitting.
 //
 
-import "testing"
-import "fmt"
-import "time"
-import "math/rand"
-import "sync/atomic"
-import "sync"
+import (
+	"fmt"
+	"math/rand"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).
@@ -51,12 +54,14 @@ func TestReElection2A(t *testing.T) {
 
 	// if the leader disconnects, a new one should be elected.
 	cfg.disconnect(leader1)
+	fmt.Println("Disconnected leader first " + strconv.Itoa(leader1))
 	cfg.checkOneLeader()
 
 	// if the old leader rejoins, that shouldn't
 	// disturb the old leader.
 	cfg.connect(leader1)
 	leader2 := cfg.checkOneLeader()
+	fmt.Println("Disconnected leader second " + strconv.Itoa(leader2))
 
 	// if there's no quorum, no leader should
 	// be elected.
@@ -66,7 +71,11 @@ func TestReElection2A(t *testing.T) {
 	cfg.checkNoLeader()
 
 	// if a quorum arises, it should elect a leader.
+	fmt.Println("Neighbor of " + strconv.Itoa(leader2) + " is " + strconv.Itoa((leader2+1)%servers))
 	cfg.connect((leader2 + 1) % servers)
+	// for _, raft := range cfg.rafts {
+	// 	fmt.Println("Test " + "id: " + strconv.Itoa(raft.me) + " " + strconv.Itoa(raft.state) + " " + strconv.Itoa(raft.numVotes))
+	// }
 	cfg.checkOneLeader()
 
 	// re-join of last node shouldn't prevent leader from existing.
