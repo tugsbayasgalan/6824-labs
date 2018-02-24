@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"labrpc"
 	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -494,7 +493,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 					rf.mu.Lock()
 					if rf.numVotes > len(rf.peers)/2 {
 
-						fmt.Println("New leader " + strconv.Itoa(rf.me))
+						//fmt.Println("New leader " + strconv.Itoa(rf.me))
 
 						rf.toState(LEADER)
 					}
@@ -515,11 +514,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 					rf.mu.Unlock()
 
 				}
-
-				// rf.mu.Lock()
-				// rf.communicateHeartBeat()
-				// time.Sleep(heartBeat * time.Millisecond)
-				// rf.mu.Unlock()
 
 			}
 
