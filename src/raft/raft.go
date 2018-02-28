@@ -54,6 +54,11 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type LogEntry struct {
+	Command interface{}
+	Term    int
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -67,7 +72,7 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	// Additional properties
+	// Additional properties in 2A
 	state         int
 	currentTerm   int
 	votedFor      int
@@ -75,6 +80,15 @@ type Raft struct {
 	electionTimer *time.Timer
 	chanVote      chan bool
 	chanHeartBeat chan bool
+
+	// Additional properties in 2B
+	log         []LogEntry
+	commitIndex int
+	lastApplied int
+
+	//for leaders
+	nextIndex  []int
+	matchIndex []int
 }
 
 // return currentTerm and whether this server
@@ -139,8 +153,12 @@ func (rf *Raft) readPersist(data []byte) {
 //
 
 type AppendEntries struct {
-	Term     int
-	LeaderId int
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	LeaderCommit int
+	Entries      []LogEntry
 }
 
 type AppendEntriesReply struct {
@@ -154,8 +172,10 @@ type AppendEntriesReply struct {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	Term        int
-	CandidateID int
+	Term         int
+	CandidateID  int
+	LastLogIndex int
+	LastLogTerm  int
 }
 
 //
@@ -180,6 +200,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 		reply.VoteGranted = false
 		reply.Term = rf.currentTerm
+		rf.votedFor = -1
 
 	} else {
 		if rf.currentTerm < args.Term {
@@ -191,10 +212,19 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 		} else {
 
-			if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-				rf.votedFor = args.CandidateID
-				reply.VoteGranted = true
-				reply.Term = rf.currentTerm
+			if rf.state == FOLLOWER && rf.votedFor == -1 || rf.votedFor == args.CandidateID {
+
+				if len(rf.log) == 0 || args.LastLogTerm > rf.log[len(rf.log)-1].Term {
+					rf.votedFor = args.CandidateID
+					reply.VoteGranted = true
+
+				} else if args.LastLogTerm == rf.log[len(rf.log)-1].Term {
+					rf.votedFor = args.CandidateID
+					reply.VoteGranted = true
+				} else {
+					rf.votedFor = -1
+					reply.VoteGranted = false
+				}
 
 			} else {
 				reply.VoteGranted = false
@@ -222,20 +252,57 @@ func (rf *Raft) AppendEntries(args *AppendEntries, reply *AppendEntriesReply) {
 
 	rf.mu.Lock()
 
+	// handle terms
 	if rf.currentTerm > args.Term {
+		// reply false if arg term is less than current term
 		reply.Success = false
 		reply.Term = rf.currentTerm
+
+	} else if rf.currentTerm < args.Term {
+		reply.Success = true
+		rf.currentTerm = args.Term
+		rf.toState(FOLLOWER)
+	} else {
+		reply.Success = true
+	}
+
+	// handle logs
+	if args.PrevLogIndex > len(rf.log)-1 || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		reply.Success = false
+	}
+
+	// handle conficts
+	conflictIndex := -1
+
+	if len(rf.log)-1 < args.PrevLogIndex+len(args.Entries) {
+		conflictIndex = args.PrevLogIndex + 1
 	} else {
 
-		if rf.currentTerm < args.Term {
-			reply.Success = true
-			rf.currentTerm = args.Term
-			reply.Term = rf.currentTerm
-			rf.toState(FOLLOWER)
-		} else {
-			reply.Term = rf.currentTerm
-			reply.Success = true
+		for i := 0; i < len(args.Entries); i++ {
+			if rf.log[args.PrevLogIndex+i+1].Term != args.Entries[i].Term {
+				conflictIndex = args.PrevLogIndex + i + 1
+				break
+			}
 		}
+
+	}
+
+	// if there was a conflict
+	if conflictIndex != -1 {
+		for i := 0; i < len(args.Entries); i++ {
+			rf.log[args.PrevLogIndex+i+1] = args.Entries[i]
+		}
+
+	}
+
+	if args.LeaderCommit > rf.commitIndex {
+
+		if args.LeaderCommit > len(rf.log)-1 {
+			rf.commitIndex = args.LeaderCommit
+		} else {
+			rf.commitIndex = len(rf.log) - 1
+		}
+
 	}
 
 	go func() {
@@ -300,9 +367,19 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntries, reply *Append
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	index := -1
 	term := rf.currentTerm
 	isLeader := rf.state == LEADER
+
+	if isLeader {
+		newLog := LogEntry{Command: command, Term: term}
+		index = len(rf.log)
+		rf.log = append(rf.log, newLog)
+
+	}
 
 	// Your code here (2B).
 
@@ -321,14 +398,11 @@ func (rf *Raft) toState(state int) {
 
 	case CANDIDATE:
 
-		//fmt.Println("Should be here???")
 		rf.state = CANDIDATE
 		rf.startElection()
 
 	case LEADER:
-
 		rf.state = LEADER
-		//rf.communicateHeartBeat()
 
 	default:
 		fmt.Printf("some weird state is happening")
